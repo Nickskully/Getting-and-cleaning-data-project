@@ -1,40 +1,48 @@
 library(dplyr)
 library(ggplot2)
-library(caret)
 library(lubridate)
+library(caret)
 library(randomForest)
 library(rpart)
 library(rpart.plot)
 library(corrplot)
-training<-read.csv("pml-training.csv",na.strings = c("NA","#DIV/0!",""))
-testing<-read.csv("pml-testing.csv",na.strings = c("NA","#DIV/0!",""))
-training$cvtd_timestamp<-as.Date(training$cvtd_timestamp,format="%m/%d/%Y %H:%M")
-training$Dotw<-factor(weekdays(training$cvtd_timestamp))
-#Cleaning
-training<-training[,colSums(is.na(training))==0]
-testing<-testing[,colSums(is.na(testing))==0]
-classe<-training$classe
-Tremove<-grepl("^X|timestamp|window",names(testing))
-training<-training[,!Tremove]
-TrCleaned<-training[,sapply(training, is.numeric)]
-TrCleaned$classe<-classe
-teRemove<-grepl("^X|timestamp|window",names(testing))
-testing<-testing[,!teRemove]
-TeCleaned<-testing[,sapply(testing, is.numeric)]
-#Create Train and Test Data sets
-set.seed(8675309)
-inTrain<-createDataPartition(TrCleaned$classe,p=0.7,list = FALSE)
-Train<-TrCleaned[inTrain,]
-Test<-TrCleaned[-inTrain,]
-#Model
-forest<-train(classe~.,data = Train,method="rf",importance=T)
-forest
-#checking
-pred<-predict(forest,Test)
-confusionMatrix(Test$classe,pred)
-acc<-postResample(pred,Test$classe)
-acc
-err<-as.numeric(TeCleaned$classe,pred)$overall[1]
-err
-res<-predict(forest,TeCleaned[,-length(names(TeCleaned))])
-res
+
+#Data Loading
+  TeData<- read.csv("pml-testing.csv", na.strings = c("NA", "#DIV/0!", ""))
+  TrainingData<- read.csv("pml-training.csv", na.strings = c("NA", "#DIV/0!", ""))
+#Data Transforamation
+  TrainingData$cvtd_timestamp<- as.Date(TrainingData$cvtd_timestamp, format = "%m/%d/%Y %H:%M")
+  TrainingData$Day<-factor(weekdays(TrainingData$cvtd_timestamp)) #Add day variable
+#Data Cleaning
+  #### Remove columns with NA missing values
+    TrainingData <- TrainingData[, colSums(is.na(TrainingData)) == 0]
+    TeData <- TeData[, colSums(is.na(TeData)) == 0] 
+  #### Remove columns that are not relevant to accelerometer measurements.
+    classe<- TrainingData$classe
+    TrRemove<- grepl("^X|timestamp|window", names(TrainingData))
+    TrainingData<- TrainingData[, !TrRemove]
+    TrClean<- TrainingData[, sapply(TrainingData, is.numeric)]
+    TrClean$classe<- classe
+    TeRemove<- grepl("^X|timestamp|window", names(TeData))
+    TeData<- TeData[, !TeRemove]
+    TeClean<- TeData[, sapply(TeData, is.numeric)]
+#Create Train and Test data sets
+  set.seed(22519)
+  inTrain <- createDataPartition(TrClean$classe, p=0.70, list=F)
+  FintrainData <- TrClean[inTrain, ]
+  FintestData <- TrClean[-inTrain, ]
+#Data Modelling
+  controlRf <- trainControl(method="cv", 5)
+  rfmod<- train(classe ~., data=FintrainData, method="rf", trControl=controlRf, importance=TRUE, ntree=100)
+  rfmod
+#Accuacy of the model on Validation data set
+  predictRfmod<- predict(rfmod, FintestData)
+  confusionMatrix(FintestData$classe, predictRfmod)
+  accuracy <- postResample(predictRfmod, FintestData$classe)
+  accuracy
+  Error <- 1 - as.numeric(confusionMatrix(FintestData$classe, predictRfmod)$overall[1])
+  Error
+  result <- predict(rfmod, TeClean[, -length(names(TeClean))])
+  result
+
+
